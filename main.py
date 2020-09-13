@@ -2,7 +2,7 @@ import sublime
 import sublime_plugin
 import os
 import re
-from esublime.esprima import esprima
+from resolve_js_modules.esprima import esprima
 import pprint
 from datetime import datetime
 
