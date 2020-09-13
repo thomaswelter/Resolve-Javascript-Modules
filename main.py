@@ -3,7 +3,6 @@ import sublime_plugin
 import os
 import re
 from resolve_js_modules.esprima import esprima
-import pprint
 from datetime import datetime
 import json
 
@@ -75,7 +74,7 @@ def parseFile(filePath):
 
 def findImports(view):
 	regex = "import \* as (\w+) from '(\.\.?/.+\.js)'\n"
-	importLookahead = 500
+	importLookahead = 1000
 
 	viewHead = view.substr(sublime.Region(0, importLookahead))
 	fileDir = os.path.dirname(view.file_name())
@@ -103,6 +102,48 @@ def findLocalCompletions():
 	localCompletionsCache = completions
 	return completions
 
+def completeModuleFilePath(view, path):
+	fileDir = os.path.dirname(view.file_name())
+	joined = os.path.abspath(os.path.join(fileDir, path))
+	try:
+		files = os.listdir(joined)
+
+	except:
+		return []
+
+	completions = []
+	for name in files:
+		if name.find('.') == -1:
+			completions.append([name + '\tdir', name])
+
+		if name[-3:] == '.js':
+			completions.append([name + '\tfile', name])
+
+	return completions
+
+
+def completeModuleExports(imports, moduleName, exportName):
+	completions = []
+
+	if moduleName not in imports:
+		for key in imports:
+			if key.startswith(moduleName):
+				completions.append([key + '\tmodule', key])
+
+		return completions
+
+	if isinstance(imports[moduleName], str):
+		moduleCompletions = parseFile(imports[moduleName])	
+
+	else:
+		moduleCompletions = imports[moduleName]
+
+	for key in moduleCompletions.keys():
+		if key.startswith(exportName):
+			completions.append(moduleCompletions[key])
+
+	return completions
+
 def getCompletions(view, locations):
 	imports = findImports(view)
 
@@ -111,29 +152,18 @@ def getCompletions(view, locations):
 	for point in locations:
 		region = view.line(point)
 		line = view.substr(region)
+
 		m = re.search('(\w+)\.?(\w*)$', line)
-		if not m or m.group() == '':
+		if m and m.group() != '':
+			moduleName = m.group(1)
+			exportName = m.group(2)
+			completions += completeModuleExports(imports, moduleName, exportName)
 			continue
 
-		moduleName = m.group(1)
-		exportName = m.group(2)
-
-		if moduleName not in imports:
-			for key in imports:
-				if key.startswith(moduleName):
-					completions.append([key + '\tmodule', key])
-
+		m = re.search("^import .+ from '(.*)'$", line)
+		if m:
+			completions += completeModuleFilePath(view, m.group(1))
 			continue
-
-		if isinstance(imports[moduleName], str):
-			moduleCompletions = parseFile(imports[moduleName])	
-
-		else:
-			moduleCompletions = imports[moduleName]
-
-		for key in moduleCompletions.keys():
-			if key.startswith(exportName):
-				completions.append(moduleCompletions[key])
 
 	return completions
 
@@ -142,10 +172,15 @@ class resolve_js_modules(sublime_plugin.EventListener):
 		if 'source.js' not in view.scope_name(0):
 			return
 
-		# try:
-		return getCompletions(view, locations)
+		try:
+			return getCompletions(view, locations)
 
-		# except Exception as e:
-		# 	log(e)
+		except Exception as e:
+			log(e)
 
-		# return None
+		return None
+
+	def on_activated(self, view):
+		settings = view.settings().get('auto_complete_triggers')
+		settings[0]['characters'] = './'
+		view.settings().set('auto_complete_triggers', settings)
