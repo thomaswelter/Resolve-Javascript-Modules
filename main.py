@@ -5,6 +5,7 @@ import re
 from resolve_js_modules.esprima import esprima
 import pprint
 from datetime import datetime
+import json
 
 pluginDir = os.path.dirname(os.path.realpath(__file__))
 
@@ -82,7 +83,25 @@ def findImports(view):
 	for (name, filePath) in re.findall(regex, viewHead):
 		imports[name] = os.path.abspath(os.path.join(fileDir, filePath))
 
+	localCompletions = findLocalCompletions()
+	for name in localCompletions.keys():
+		imports[name] = localCompletions[name]
+
 	return imports
+
+localCompletionsCache = None
+def findLocalCompletions():
+	global localCompletionsCache
+	
+	if localCompletionsCache:
+		return localCompletionsCache
+
+	completionsPath = os.path.join(pluginDir, "browser_completions.json")
+	with open(completionsPath, encoding='utf8') as file:
+		completions = json.loads(file.read())
+
+	localCompletionsCache = completions
+	return completions
 
 def getCompletions(view, locations):
 	imports = findImports(view)
@@ -102,11 +121,16 @@ def getCompletions(view, locations):
 		if moduleName not in imports:
 			for key in imports:
 				if key.startswith(moduleName):
-					completions.append([key + '.js\tmodule', key])
+					completions.append([key + '\tmodule', key])
 
 			continue
 
-		moduleCompletions = parseFile(imports[moduleName])
+		if isinstance(imports[moduleName], str):
+			moduleCompletions = parseFile(imports[moduleName])	
+
+		else:
+			moduleCompletions = imports[moduleName]
+
 		for key in moduleCompletions.keys():
 			if key.startswith(exportName):
 				completions.append(moduleCompletions[key])
@@ -118,10 +142,10 @@ class resolve_js_modules(sublime_plugin.EventListener):
 		if 'source.js' not in view.scope_name(0):
 			return
 
-		try:
-			return getCompletions(view, locations)
+		# try:
+		return getCompletions(view, locations)
 
-		except Exception as e:
-			log(e)
+		# except Exception as e:
+		# 	log(e)
 
-		return None
+		# return None

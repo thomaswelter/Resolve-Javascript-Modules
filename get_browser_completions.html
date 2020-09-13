@@ -1,0 +1,61 @@
+<!doctype html>
+
+<script>
+	function getAllPropertyNames (obj) {
+	    const forbidden = [
+	        "constructor",
+	        "prototype",
+	        "length",
+	        "__defineGetter__",
+			"__defineSetter__",
+			"hasOwnProperty",
+			"__lookupGetter__",
+			"__lookupSetter__",
+			"isPrototypeOf",
+			"propertyIsEnumerable",
+			"toString",
+			"valueOf",
+			"__proto__",
+			"toLocaleString",
+			"arguments",
+			"caller",
+			"apply",
+			"bind",
+			"call",
+			"name",
+	    ]
+	    const proto     = Object.getPrototypeOf(obj);
+	    const inherited = (proto) ? getAllPropertyNames(proto) : [];
+	    const items = Object.getOwnPropertyNames(obj)
+	        .concat(inherited)
+	        .filter(x => forbidden.indexOf(x) == -1)
+	    return [...new Set(items)];
+	}
+
+	let ignore = [
+	    'top', 'self', 'globalThis', 'frames', 'parent',
+	]
+
+	let apis = {}
+	for(let moduleName of getAllPropertyNames(window)) {
+	    if(window[moduleName] === null || ignore.indexOf(moduleName) > -1)
+	    	continue
+
+	    const moduleType = typeof window[moduleName]
+	    if(moduleType !== 'object' && moduleType !== 'function')
+	    	continue
+
+    	apis[moduleName] = {}
+
+	    for(let name of getAllPropertyNames(window[moduleName])) {
+	    	const type = typeof window[moduleName][name]
+
+	    	apis[moduleName][name] = [
+	    		name + (type == 'function'? '(...)' : '') + '\t' + moduleName + (moduleType == 'function'? '()' : ''),
+	    		name + (type == 'function'? '($1)' : '')
+	    	]
+	    }
+	}
+	let json = JSON.stringify(apis, null, '\t')
+	console.log(json)
+</script>
