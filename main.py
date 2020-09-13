@@ -34,6 +34,7 @@ def formatFunction(moduleName, name, params):
 
 def getModuleCompletionsFromAst(ast, moduleName):	
 	completions = {}
+	rootVars = {}
 
 	for node in ast.body:
 		if node.type == 'ExportNamedDeclaration':
@@ -49,8 +50,33 @@ def getModuleCompletionsFromAst(ast, moduleName):
 						if declarator.init and declarator.init.type == 'ArrowFunctionExpression':
 							completions[name] = formatFunction(moduleName, name, declarator.init.params)
 
+						elif declarator.init and declarator.init.type == 'FunctionExpression':
+							completions[name] = formatFunction(moduleName, name, declarator.init.params)
+
 						else:
 							completions[name] = [name + '\t{}'.format(moduleName), name]
+
+			for specifier in node.specifiers:
+				if specifier.type == 'ExportSpecifier':
+					exported = specifier.exported.name
+					local = specifier.local.name
+
+					if local in rootVars:
+						completions[exported] = rootVars[local](exported)
+
+		if node.type == 'VariableDeclaration':
+			for declarator in node.declarations:
+				if declarator.type == 'VariableDeclarator':
+					name = declarator.id.name
+
+					if declarator.init and declarator.init.type == 'ArrowFunctionExpression':
+						rootVars[name] = (lambda p: lambda n: formatFunction(moduleName, n, p))(declarator.init.params)
+
+					elif declarator.init and declarator.init.type == 'FunctionExpression':
+						rootVars[name] = (lambda p: lambda n: formatFunction(moduleName, n, p))(declarator.init.params)
+
+					else:
+						rootVars[name] = lambda n: [n + '\t{}'.format(moduleName), n]
 
 	return completions
 
@@ -73,7 +99,7 @@ def parseFile(filePath):
 		return {}
 
 def findImports(view):
-	regex = "import \* as (\w+) from '(\.\.?/.+\.js)'\n"
+	regex = "import\s+\*\s+as\s+(\w+)\s+from\s+['\"](\.\.?/.+\.js)['\"];?"
 	importLookahead = 1000
 
 	viewHead = view.substr(sublime.Region(0, importLookahead))
@@ -147,6 +173,7 @@ def completeModuleExports(imports, moduleName, exportName):
 def getCompletions(view, locations):
 	imports = findImports(view)
 
+	hideOtherCompletions = False
 	completions = []
 
 	for point in locations:
@@ -160,10 +187,14 @@ def getCompletions(view, locations):
 			completions += completeModuleExports(imports, moduleName, exportName)
 			continue
 
-		m = re.search("^import .+ from '(.*)'$", line)
+		m = re.search("^import.+?['\"]([^'\"]*)['\"]?;?$", line)
 		if m:
 			completions += completeModuleFilePath(view, m.group(1))
+			hideOtherCompletions = True
 			continue
+
+	if hideOtherCompletions:
+		return (completions, sublime.INHIBIT_WORD_COMPLETIONS | sublime.INHIBIT_EXPLICIT_COMPLETIONS)
 
 	return completions
 
