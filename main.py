@@ -8,12 +8,6 @@ import json
 
 pluginDir = os.path.dirname(os.path.realpath(__file__))
 
-def log(text):
-	logPath = os.path.join(pluginDir, "log.txt")
-
-	with open(logPath, 'a', encoding='utf8') as logFile:
-		logFile.write('\n{} > {}'.format(str(datetime.now()), text))
-
 def formatFunction(moduleName, name, params):
 	args = []
 	if params:
@@ -95,7 +89,7 @@ def parseFile(filePath):
 			return moduleCompletions
 
 	except FileNotFoundError:
-		log('File not found: ' + filePath)
+		sublime.error_message('Resolve JS Modules -> Module not found: ' + filePath)
 		return {}
 
 def findImports(view):
@@ -121,12 +115,9 @@ def findLocalCompletions():
 	if localCompletionsCache:
 		return localCompletionsCache
 
-	completionsPath = os.path.join(pluginDir, "browser_completions.json")
-	with open(completionsPath, encoding='utf8') as file:
-		completions = json.loads(file.read())
-
-	localCompletionsCache = completions
-	return completions
+	fileContent = sublime.load_resource("Packages/resolve_js_modules/browser_completions.json")
+	localCompletionsCache = json.loads(fileContent)
+	return localCompletionsCache
 
 def completeModuleFilePath(view, path):
 	fileDir = os.path.dirname(view.file_name())
@@ -207,7 +198,7 @@ class resolve_js_modules(sublime_plugin.EventListener):
 			return getCompletions(view, locations)
 
 		except Exception as e:
-			log(e)
+			sublime.error_message('Resolev JS Modules -> ' + e)
 
 		return None
 
