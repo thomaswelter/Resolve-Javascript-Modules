@@ -6,8 +6,6 @@ from resolve_js_modules.esprima import esprima
 from datetime import datetime
 import json
 
-pluginDir = os.path.dirname(os.path.realpath(__file__))
-
 def formatFunction(moduleName, name, params):
 	args = []
 	if params:
@@ -74,22 +72,46 @@ def getModuleCompletionsFromAst(ast, moduleName):
 
 	return completions
 
+importErrors = {}
+def show_import_error(view, filePath, location, text):
+	region = sublime.Region(location[0], location[1])
+	importErrors[filePath] = (region, text)
+
+	regions = []
+	for (region, text) in importErrors.values():
+		regions.append(region)
+
+	styling = sublime.DRAW_SOLID_UNDERLINE|sublime.DRAW_NO_FILL|sublime.DRAW_NO_OUTLINE
+	view.add_regions("module_import_error", regions, "invalid.illegal", "", styling)
+
+
 parseFileCache = {}
-def parseFile(filePath):
+def parseFile(view, filePath, location):
+	if filePath in importErrors:
+		del importErrors[filePath]
+
+	if len(importErrors.keys()) == 0:
+		view.erase_regions("module_import_error")
+
 	if filePath in parseFileCache and os.path.getmtime(filePath) == parseFileCache[filePath][0]:
 		return parseFileCache[filePath][1]
 
-	moduleName = os.path.basename(filePath)
-
 	try:
 		with open(filePath, encoding='utf8') as file:
-			ast = esprima.parseModule(file.read())
+			content = file.read()
+			try:
+				ast = esprima.parseModule(content)
+			except Exception as e:
+				show_import_error(view, filePath, location, "Failed parsing module: " + filePath)
+				return {}
+
+			moduleName = os.path.basename(filePath)
 			moduleCompletions = getModuleCompletionsFromAst(ast, moduleName)
 			parseFileCache[filePath] = (os.path.getmtime(filePath), moduleCompletions)
 			return moduleCompletions
 
 	except FileNotFoundError:
-		sublime.error_message('Resolve JS Modules -> Module not found: ' + filePath)
+		show_import_error(view, filePath, location, "Module not found: " + filePath)
 		return {}
 
 def findImports(view):
@@ -99,12 +121,21 @@ def findImports(view):
 	viewHead = view.substr(sublime.Region(0, importLookahead))
 	fileDir = os.path.dirname(view.file_name())
 	imports = {}
-	for (name, filePath) in re.findall(regex, viewHead):
-		imports[name] = os.path.abspath(os.path.join(fileDir, filePath))
+	for m in re.finditer(regex, viewHead):
+		name = m.group(1)
+		filePath = m.group(2)
+		path = os.path.abspath(os.path.join(fileDir, filePath))
+		location = m.span(2)
+		imports[name] = ('file', path, location)
+
+	# remove errors that are not in import anymore
+	for path in importErrors.keys():
+		if path not in imports:
+			del importErrors[path]
 
 	localCompletions = findLocalCompletions()
 	for name in localCompletions.keys():
-		imports[name] = localCompletions[name]
+		imports[name] = ('browser', localCompletions[name])
 
 	return imports
 
@@ -139,7 +170,7 @@ def completeModuleFilePath(view, path):
 	return completions
 
 
-def completeModuleExports(imports, moduleName, exportName):
+def completeModuleExports(view, imports, moduleName, exportName):
 	completions = []
 
 	if moduleName not in imports:
@@ -149,11 +180,11 @@ def completeModuleExports(imports, moduleName, exportName):
 
 		return completions
 
-	if isinstance(imports[moduleName], str):
-		moduleCompletions = parseFile(imports[moduleName])	
+	if imports[moduleName][0] == 'file':
+		moduleCompletions = parseFile(view, imports[moduleName][1], imports[moduleName][2])	
 
 	else:
-		moduleCompletions = imports[moduleName]
+		moduleCompletions = imports[moduleName][1]
 
 	for key in moduleCompletions.keys():
 		if key.startswith(exportName):
@@ -175,7 +206,7 @@ def getCompletions(view, locations):
 		if m and m.group() != '':
 			moduleName = m.group(1)
 			exportName = m.group(2)
-			completions += completeModuleExports(imports, moduleName, exportName)
+			completions += completeModuleExports(view, imports, moduleName, exportName)
 			continue
 
 		m = re.search("^import.+?['\"]([^'\"]*)['\"]?;?$", line)
@@ -194,15 +225,14 @@ class resolve_js_modules(sublime_plugin.EventListener):
 		if 'source.js' not in view.scope_name(0):
 			return
 
-		try:
-			return getCompletions(view, locations)
-
-		except Exception as e:
-			sublime.error_message('Resolev JS Modules -> ' + e)
-
-		return None
+		return getCompletions(view, locations)
 
 	def on_activated(self, view):
 		settings = view.settings().get('auto_complete_triggers')
 		settings[0]['characters'] = './'
 		view.settings().set('auto_complete_triggers', settings)
+
+	def on_hover(self, view, point, hover_zone):
+		for (region, text) in importErrors.values():
+			if region.contains(point):
+				view.show_popup(text, sublime.HIDE_ON_MOUSE_MOVE_AWAY, point)

@@ -7,6 +7,10 @@ This plugin for Sublime Text 3 adds completions for es modules, import file path
 
 ![Auto complete browser api's](resolve-browser-apis.png)
 
+# How to use
+use relative imports: `import * as xyz from './relative/path.js'`
+the import path is checked when writing `xyz.`, if the file does not exist or could not be parsed the path is underlined. You can remove any error by fixing the problems and requesting the object again.
+
 # How it works
 The imports are parsed from the beginning of the file, it looks at wildcard imports of the form `import * as xyz from './relative/path.js'`. Then the module is parsed using a python port of `esprima` and cached for later use. The implementation is fully written in python without external dependencies.
 
