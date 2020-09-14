@@ -76,61 +76,71 @@ importErrors = {}
 def show_import_error(view, filePath, location, text):
 	region = sublime.Region(location[0], location[1])
 	importErrors[filePath] = (region, text)
+	draw_errors(view)
 
+def draw_errors(view):
 	regions = []
 	for (region, text) in importErrors.values():
 		regions.append(region)
 
-	styling = sublime.DRAW_SOLID_UNDERLINE|sublime.DRAW_NO_FILL|sublime.DRAW_NO_OUTLINE
-	view.add_regions("module_import_error", regions, "invalid.illegal", "", styling)
-
-
-parseFileCache = {}
-def parseFile(view, filePath, location):
-	if filePath in importErrors:
-		del importErrors[filePath]
-
 	if len(importErrors.keys()) == 0:
 		view.erase_regions("module_import_error")
 
-	if filePath in parseFileCache and os.path.getmtime(filePath) == parseFileCache[filePath][0]:
+	else:
+		styling = sublime.DRAW_SOLID_UNDERLINE|sublime.DRAW_NO_FILL|sublime.DRAW_NO_OUTLINE
+		view.add_regions("module_import_error", regions, "invalid.illegal", "", styling)
+
+parseFileCache = {}
+def parseFile(view, filePath, location):
+	if filePath[0] != '.' or filePath[-3:] != '.js':
+		show_import_error(view, filePath, location, "Import most be relative path to .js file")
+		return {}
+
+	fileDir = os.path.dirname(view.file_name())
+	path = os.path.abspath(os.path.join(fileDir, filePath))
+
+	if filePath in parseFileCache and os.path.getmtime(path) == parseFileCache[filePath][0]:
 		return parseFileCache[filePath][1]
 
 	try:
-		with open(filePath, encoding='utf8') as file:
+		with open(path, encoding='utf8') as file:
 			content = file.read()
 			try:
 				ast = esprima.parseModule(content)
 			except Exception as e:
-				show_import_error(view, filePath, location, "Failed parsing module: " + filePath)
+				show_import_error(view, filePath, location, "Failed parsing module")
 				return {}
 
-			moduleName = os.path.basename(filePath)
+			moduleName = os.path.basename(path)
 			moduleCompletions = getModuleCompletionsFromAst(ast, moduleName)
-			parseFileCache[filePath] = (os.path.getmtime(filePath), moduleCompletions)
+			parseFileCache[filePath] = (os.path.getmtime(path), moduleCompletions)
+
+			if filePath in importErrors:
+				del importErrors[filePath]
+
+			draw_errors(view)
 			return moduleCompletions
 
 	except FileNotFoundError:
-		show_import_error(view, filePath, location, "Module not found: " + filePath)
+		show_import_error(view, filePath, location, "Module not found")
 		return {}
 
 def findImports(view):
-	regex = "import\s+\*\s+as\s+(\w+)\s+from\s+['\"](\.\.?/.+\.js)['\"];?"
+	regex = "import\s+\*\s+as\s+(\w+)\s+from\s+['\"](.+?)['\"];?"
 	importLookahead = 1000
 
 	viewHead = view.substr(sublime.Region(0, importLookahead))
-	fileDir = os.path.dirname(view.file_name())
 	imports = {}
 	for m in re.finditer(regex, viewHead):
 		name = m.group(1)
 		filePath = m.group(2)
-		path = os.path.abspath(os.path.join(fileDir, filePath))
 		location = m.span(2)
-		imports[name] = ('file', path, location)
+		imports[name] = ('file', filePath, location)
 
 	# remove errors that are not in import anymore
-	for path in importErrors.keys():
-		if path not in imports:
+	importPaths = map(lambda x: x[1], imports.values())
+	for path in list(importErrors):
+		if path not in importPaths:
 			del importErrors[path]
 
 	localCompletions = findLocalCompletions()
