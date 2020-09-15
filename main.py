@@ -156,7 +156,7 @@ def findLocalCompletions():
 	if localCompletionsCache:
 		return localCompletionsCache
 
-	fileContent = sublime.load_resource("Packages/resolve_js_modules/browser_completions.json")
+	fileContent = sublime.load_resource("Packages/Resolve JS Modules/browser_completions.json")
 	localCompletionsCache = json.loads(fileContent)
 	return localCompletionsCache
 
