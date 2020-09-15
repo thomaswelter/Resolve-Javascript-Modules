@@ -156,7 +156,7 @@ def findLocalCompletions():
 	if localCompletionsCache:
 		return localCompletionsCache
 
-	fileContent = sublime.load_resource("Packages/Resolve Javascript Modules/browser_completions.json")
+	fileContent = sublime.load_resource("Packages/Resolve Javascript Modules Development/browser_completions.json")
 	localCompletionsCache = json.loads(fileContent)
 	return localCompletionsCache
 
@@ -209,7 +209,8 @@ def getCompletions(view, locations):
 	completions = []
 
 	for point in locations:
-		region = view.line(point)
+		lineStart = view.line(point).begin()
+		region = sublime.Region(lineStart, lineStart + view.rowcol(point)[1])
 		line = view.substr(region)
 
 		m = re.search('(\w+)\.?(\w*)$', line)
