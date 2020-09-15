@@ -2,7 +2,7 @@ import sublime
 import sublime_plugin
 import os
 import re
-from resolve_js_modules.esprima import esprima
+from .esprima import esprima
 from datetime import datetime
 import json
 
@@ -156,7 +156,7 @@ def findLocalCompletions():
 	if localCompletionsCache:
 		return localCompletionsCache
 
-	fileContent = sublime.load_resource("Packages/resolve_js_modules/browser_completions.json")
+	fileContent = sublime.load_resource("Packages/Resolve Javascript Modules/browser_completions.json")
 	localCompletionsCache = json.loads(fileContent)
 	return localCompletionsCache
 
