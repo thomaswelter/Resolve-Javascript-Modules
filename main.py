@@ -5,6 +5,7 @@ import re
 from .esprima import esprima
 from datetime import datetime
 import json
+import copy
 
 def formatFunction(moduleName, name, params):
 	args = []
@@ -156,7 +157,7 @@ def findLocalCompletions():
 	if localCompletionsCache:
 		return localCompletionsCache
 
-	fileContent = sublime.load_resource("Packages/Resolve Javascript Modules Development/browser_completions.json")
+	fileContent = sublime.load_resource("Packages/Resolve Javascript Modules/browser_completions.json")
 	localCompletionsCache = json.loads(fileContent)
 	return localCompletionsCache
 
@@ -209,6 +210,7 @@ def getCompletions(view, locations):
 	completions = []
 
 	for point in locations:
+		# select from beginning of the line to the cursor
 		lineStart = view.line(point).begin()
 		region = sublime.Region(lineStart, lineStart + view.rowcol(point)[1])
 		line = view.substr(region)
@@ -217,7 +219,14 @@ def getCompletions(view, locations):
 		if m and m.group() != '':
 			moduleName = m.group(1)
 			exportName = m.group(2)
-			completions += completeModuleExports(view, imports, moduleName, exportName)
+			completions += copy.deepcopy(completeModuleExports(view, imports, moduleName, exportName))
+
+			if view.substr(point) == '(':
+				for completion in completions:
+					index = completion[1].find('(')
+					if index > -1:
+						completion[1] = completion[1][0:index]
+
 			continue
 
 		m = re.search("^import.+?['\"]([^'\"]*)['\"]?;?$", line)
@@ -225,6 +234,7 @@ def getCompletions(view, locations):
 			completions += completeModuleFilePath(view, m.group(1))
 			hideOtherCompletions = True
 			continue
+
 
 	if hideOtherCompletions:
 		return (completions, sublime.INHIBIT_WORD_COMPLETIONS | sublime.INHIBIT_EXPLICIT_COMPLETIONS)
