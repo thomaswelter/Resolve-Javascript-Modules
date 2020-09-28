@@ -7,15 +7,34 @@ from datetime import datetime
 import json
 import copy
 
+def unpackParam(param):
+	if param.type == 'Identifier':
+		return param.name
+
+	elif param.type == 'AssignmentPattern':
+		return unpackParam(param.left)
+
+	elif param.type == 'ArrayPattern':
+		return '[' + ', '.join(map(unpackParam, param.elements)) + ']'
+
+	elif param.type == 'ObjectPattern':
+		args = []
+		for prop in param.properties:
+			if prop.type == 'Property':
+				args.append(unpackParam(prop))
+
+		return '{' + ', '.join(args) + '}'
+
+	elif param.type == 'RestElement':
+		return '...' + unpackParam(param.argument)
+
+	return ''
+
 def formatFunction(moduleName, name, params):
 	args = []
 	if params:
 		for param in params:
-			if param.type == 'Identifier':
-				args.append(param.name)
-
-			if param.type == 'AssignmentPattern' and param.left.type == 'Identifier':
-				args.append(param.left.name)
+			args.append(unpackParam(param))
 
 	suggestion = '{}({})\t{}'.format(name, ', '.join(args), moduleName)
 
